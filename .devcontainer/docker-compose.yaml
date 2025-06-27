@@ -1,0 +1,6 @@
+version: "3.9"
+services: 
+  app:
+    image: mcr.microsoft.com/vscode/devcontainers/python:3.10-bullseye
+    volumes:
+      - ./:/workspace:cached
