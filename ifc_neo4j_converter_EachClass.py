@@ -1,56 +1,51 @@
 import ifcopenshell
 import sys
-from py2neo import Graph, Node
 import time
 import os
+from neo4j import GraphDatabase
 
-neo4j_username=os.getenv("NEO4J_USERNAME", "neo4j")
-neo4j_password=os.getenv("NEO4J_PASSWORD", "neo4j")
-neo4j_uri=os.getenv("NEO4J_URI", "bolt://localhost:7687")
-print (neo4j_uri,neo4j_username, neo4j_password)
+# Load Neo4j credentials from environment or use defaults
+neo4j_username = os.getenv("NEO4J_USERNAME", "neo4j")
+neo4j_password = os.getenv("NEO4J_PASSWORD", "password")
+neo4j_uri = os.getenv("NEO4J_URI", "bolt://database:7687")
+print(neo4j_uri, neo4j_username, neo4j_password)
+
+# Path to IFC file
+ifc_path = "ifc_files/IfcOpenHouse_original.ifc"
+
 def typeDict(key):
-#    f = ifcopenshell.file()
-    value = f.create_entity(key).wrapped_data.get_attribute_names()
-    return value
+    return f.create_entity(key).wrapped_data.get_attribute_names()
 
-
-start = time.time()  # Culculate time to process
-
-
-ifc_path = "ifc_files/ronen_Structural.ifc"
-#ifc_path = "ifc_files/20210125Prova.ifc"
-start = time.time()  # Culculate time to process
+start = time.time()
 print("Start!")
 print(time.strftime("%Y/%m/%d %H:%M:%S", time.strptime(time.ctime())))
-log1 = str(time.strftime("%Y/%m/%d %H:%M:%S", time.strptime(time.ctime()))) + " Start "
 
-
+# Load IFC
+f = ifcopenshell.open(ifc_path)
 nodes = []
 edges = []
 
-f = ifcopenshell.open(ifc_path)
 for el in f:
     if el.is_a() == "IfcOwnerHistory":
         continue
     tid = el.id()
     cls = el.is_a()
     pairs = []
-    keys = []
     try:
         keys = [x for x in el.get_info() if x not in ["type", "id", "OwnerHistory"]]
     except RuntimeError:
-        # we actually can't catch this, but try anyway
-        pass
+        continue
+
     for key in keys:
         val = el.get_info()[key]
-        if any(hasattr(val, "is_a") and val.is_a(thisTyp)
-               for thisTyp in ["IfcBoolean", "IfcLabel", "IfcText", "IfcReal"]):
+        if any(hasattr(val, "is_a") and val.is_a(thisTyp) for thisTyp in ["IfcBoolean", "IfcLabel", "IfcText", "IfcReal"]):
             val = val.wrappedValue
-        if val and type(val) is tuple and type(val[0]) in (str, bool, float, int):
+        if val and isinstance(val, tuple) and isinstance(val[0], (str, bool, float, int)):
             val = ",".join(str(x) for x in val)
-        if type(val) not in (str, bool, float, int):
+        if not isinstance(val, (str, bool, float, int)):
             continue
         pairs.append((key, val))
+
     nodes.append((tid, cls, pairs))
 
     for i in range(len(el)):
@@ -64,26 +59,14 @@ for el in f:
             if el[i].is_a() == "IfcOwnerHistory":
                 continue
             if el[i].id() != 0:
-                # edges.append({"from":tid, "to":el[i].id(), "reltype":typeDict(cls)[i]})
-                # edges.append((tid, el[i].id(), typeDict(cls)[i]))
                 edges.append((tid, cls, el[i].id(), el[i].is_a(), typeDict(cls)[i]))
                 continue
         try:
             iter(el[i])
         except TypeError:
             continue
-        # destinations = [
-        #     x.id() for x in el[i] if isinstance(
-        #         x, ifcopenshell.entity_instance)]
-        # for connectedTo in destinations:
-        #     # edges.append({"from": tid, "to": connectedTo, "reltype": typeDict(cls)[i]})
-        #     edges.append((tid, connectedTo, typeDict(cls)[i]))
-        destinations = [
-            x.id() for x in el[i] if isinstance(
-                x, ifcopenshell.entity_instance)]
-        destinations_cls = [
-            x.is_a() for x in el[i] if isinstance(
-                x, ifcopenshell.entity_instance)]
+        destinations = [x.id() for x in el[i] if isinstance(x, ifcopenshell.entity_instance)]
+        destinations_cls = [x.is_a() for x in el[i] if isinstance(x, ifcopenshell.entity_instance)]
         for (connectedTo, connectedTo_cls) in zip(destinations, destinations_cls):
             edges.append((tid, cls, connectedTo, connectedTo_cls, typeDict(cls)[i]))
 
@@ -91,62 +74,40 @@ if len(nodes) == 0:
     print("no nodes in file", file=sys.stderr)
     sys.exit(1)
 
+print("List creation process done. Time:", round(time.time() - start))
 
-print("List creat prosess done. Take for ", round(time.time() - start))
-print(time.strftime("%Y/%m/%d %H:%M:%S", time.strptime(time.ctime())))
-log2 = str(round(time.time() - start)) + "sec.\n" + \
-    str(time.strftime("%Y/%m/%d %H:%M:%S", time.strptime(time.ctime()))) + " List creat prosess done"
+# Connect to Neo4j using official driver
+driver = GraphDatabase.driver(neo4j_uri, auth=(neo4j_username, neo4j_password))
 
-# Initialize neo4j database
-graph = Graph( uri=neo4j_uri,auth=(neo4j_username, neo4j_password))  # http://localhost:7474
-graph.delete_all()
+driver.execute_query
 
-for node in nodes:
-    nId, cls, pairs = node
-    one_node = Node(cls, nid=nId)
-    for k, v in pairs:
-        one_node[k] = v
-    graph.create(one_node)
+# Helper functions
+def clear_database(tx):
+    tx.run("MATCH (n) DETACH DELETE n")
 
-# Index create process
-# ifc_classes = set([i[2] for i in edges])
-# for cl in ifc_classes:
-#     graph.run("CREATE INDEX ON :{:s}(nid)".format(cl))
+def create_node(tx, cls, nid, properties):
+    props = { "nid": nid, **{k: v for k, v in properties} }
+    prop_str = ", ".join(f"{k}: ${k}" for k in props)
+    tx.run(f"CREATE (n:{cls} {{{prop_str}}})", props)
 
-print("Node creat prosess done. Take for ", round(time.time() - start))
-print(time.strftime("%Y/%m/%d %H:%M:%S", time.strptime(time.ctime())))
-log2 = str(round(time.time() - start)) + "sec.\n" + \
-    str(time.strftime("%Y/%m/%d %H:%M:%S", time.strptime(time.ctime()))) + " Node creat prosess done"
+def create_relationship(tx, id1, cls1, id2, cls2, relType):
+    query = f"""
+        MATCH (a:{cls1} {{nid: $id1}})
+        MATCH (b:{cls2} {{nid: $id2}})
+        CREATE (a)-[r:`{relType}`]->(b)
+    """
+    tx.run(query, id1=id1, id2=id2)
 
-# query_rel = """
-# MATCH (a)
-# WHERE a.nid = {:d}
-# MATCH (b)
-# WHERE b.nid = {:d}
-# CREATE (a)-[:{:s}]->(b)
-# """
+# Begin Neo4j session
+with driver.session() as session:
+    session.execute_write(clear_database)
 
-# for (nId1, nId2, relType) in edges:
-#     graph.run(query_rel.format(nId1, nId2, relType))
+    for nId, cls, pairs in nodes:
+        session.execute_write(create_node, cls, nId, pairs)
 
-query_rel = """
-MATCH (a:{cls1})
-WHERE a.nid = {id1}
-MATCH (b:{cls2})
-WHERE b.nid = {id2}
-CREATE (a)-[:{relType}]->(b)
-"""
+    for id1, cls1, id2, cls2, relType in edges:
+        session.execute_write(create_relationship, id1, cls1, id2, cls2, relType)
 
-for (id1, cls1, id2, cls2, relType) in edges:
-    graph.run(query_rel.format(cls1=cls1, cls2=cls2, id1=id1, id2=id2, relType=relType))
-print("All done. Take for ", round(time.time() - start))
-print(time.strftime("%Y/%m/%d %H:%M:%S", time.strptime(time.ctime())))
-log3 = str(round(time.time() - start)) + "sec.\n" + \
-    str(time.strftime("%Y/%m/%d %H:%M:%S", time.strptime(time.ctime()))) + " All done"
+driver.close()
 
-#with open("log.text", mode="a") as f:
-#    f.write(ifc_path + "\n")
-#    f.write("Nodes_" + str(len(nodes)) + " ,Edges_" + str(len(edges)) + "\n")
-#    f.write(log1 + "\n")
-#    f.write(log2 + "\n")
-#    f.write(log3 + "\n\n")
+print("All done. Time:", round(time.time() - start))
