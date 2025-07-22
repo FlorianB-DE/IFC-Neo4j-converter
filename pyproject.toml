@@ -3,6 +3,6 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "IFC Neo4j"
+name = "IFC_Neo4j"
 version = "0.0.1"
 dependencies = ["ifcopenshell", "neo4j"]
