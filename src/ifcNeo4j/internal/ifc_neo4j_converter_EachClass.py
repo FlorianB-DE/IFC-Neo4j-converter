@@ -104,14 +104,18 @@ def _ifc_neo4j_converter_each_class(ifc_path: os.PathLike | str, driver: Driver 
         tx.run(query, id1=id1, id2=id2)
 
     # Begin Neo4j session
-    with driver if isinstance(driver, Session) else driver.session() as session:
-        session.execute_write(clear_database)
+    session = driver if isinstance(driver, Session) else driver.session()
+    session.execute_write(clear_database)
 
-        for nId, cls, pairs in nodes:
-            session.execute_write(create_node, cls, nId, pairs)
+    for nId, cls, pairs in nodes:
+        session.execute_write(create_node, cls, nId, pairs)
 
-        for id1, cls1, id2, cls2, relType in edges:
-            session.execute_write(create_relationship, id1,
-                                  cls1, id2, cls2, relType)
+    for id1, cls1, id2, cls2, relType in edges:
+        session.execute_write(create_relationship, id1,
+                                cls1, id2, cls2, relType)
+        
+
+    if not isinstance(driver, Session):
+        session.close()
 
     print("All done. Time:", round(time.time() - start))

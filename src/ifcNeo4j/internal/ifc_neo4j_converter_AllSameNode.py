@@ -76,26 +76,30 @@ def _ifc_neo4j_converter_all_same_class(ifc_path: os.PathLike | str, driver: Dri
     print("List creation process done in", round(time.time() - start, 2), "seconds.")
     print(time.strftime("%Y/%m/%d %H:%M", time.strptime(time.ctime())))
 
-    with driver if isinstance(driver, Session) else driver.session() as session:
-        # Delete all existing nodes/relationships
-        session.run("MATCH (n) DETACH DELETE n")
+    session = driver if isinstance(driver, Session) else driver.session()
 
-        # Create nodes
-        for nId, cls, pairs in nodes:
-            props = {k: v for k, v in pairs}
-            props.update({"nid": nId, "ClassName": cls})
-            session.run("CREATE (n:IfcNode $props)", props=props)
+    # Delete all existing nodes/relationships
+    session.run("MATCH (n) DETACH DELETE n")
 
-        # Create index
-        session.run("CREATE INDEX IF NOT EXISTS FOR (n:IfcNode) ON (n.nid)")
+    # Create nodes
+    for nId, cls, pairs in nodes:
+        props = {k: v for k, v in pairs}
+        props.update({"nid": nId, "ClassName": cls})
+        session.run("CREATE (n:IfcNode $props)", props=props)
 
-        # Create relationships
-        for nId1, nId2, relType in edges:
-            session.run("""
-                MATCH (a:IfcNode {nid: $id1})
-                MATCH (b:IfcNode {nid: $id2})
-                CREATE (a)-[r:`%s`]->(b)
-            """ % relType, parameters={"id1": nId1, "id2": nId2})
+    # Create index
+    session.run("CREATE INDEX IF NOT EXISTS FOR (n:IfcNode) ON (n.nid)")
+
+    # Create relationships
+    for nId1, nId2, relType in edges:
+        session.run("""
+            MATCH (a:IfcNode {nid: $id1})
+            MATCH (b:IfcNode {nid: $id2})
+            CREATE (a)-[r:`%s`]->(b)
+        """ % relType, parameters={"id1": nId1, "id2": nId2})
+
+    if not isinstance(driver, Session):
+        session.close()
 
     print("All done. Total time:", round(time.time() - start, 2), "seconds.")
     print(time.strftime("%Y/%m/%d %H:%M", time.strptime(time.ctime())))
