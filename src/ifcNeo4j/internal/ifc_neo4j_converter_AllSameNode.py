@@ -1,4 +1,4 @@
-from typing import Any, List
+from typing import Any
 import ifcopenshell
 from ifcopenshell import file
 import sys
@@ -11,18 +11,18 @@ neo4j_username = os.getenv("NEO4J_USERNAME", "neo4j")
 neo4j_password = os.getenv("NEO4J_PASSWORD", "password")
 neo4j_uri = os.getenv("NEO4J_URI", "bolt://database:7687")
 
-def _typeDict(key: str) -> List[str]:
+def _typeDict(key: str) -> list[str]:
     f = ifcopenshell.file()
-    value: List[str] = f.create_entity(key).wrapped_data.get_attribute_names()
+    value: list[str] = f.create_entity(key).wrapped_data.get_attribute_names()
     return value
 
-def _ifc_neo4j_converter_all_same_class(ifc_path: os.PathLike | str, driver: Driver | Session = GraphDatabase.driver(neo4j_uri, auth=(neo4j_username, neo4j_password)), ignored_classes: List[str] = ["IfcOwnerHistory"]):
+def _ifc_neo4j_converter_all_same_class(ifc_path: os.PathLike | str, driver: Driver | Session = GraphDatabase.driver(neo4j_uri, auth=(neo4j_username, neo4j_password)), ignored_classes: list[str] = ["IfcOwnerHistory"]):
     start = time.time()
     print("Start!")
     print(time.strftime("%Y/%m/%d %H:%M", time.strptime(time.ctime())))
 
-    nodes: List[tuple[int, str, List[tuple[str, Any]]]] = []
-    edges: List[tuple[int, str | int, str]] = []
+    nodes: list[tuple[int, str, list[tuple[str, Any]]]] = []
+    edges: list[tuple[int, str | int, str]] = []
 
     f: file = ifcopenshell.open(ifc_path)
 
@@ -31,7 +31,7 @@ def _ifc_neo4j_converter_all_same_class(ifc_path: os.PathLike | str, driver: Dri
         if cls in ignored_classes:
             continue
         tid = el.id()
-        pairs:List[tuple[str, Any]] = []
+        pairs:list[tuple[str, Any]] = []
         keys = []
         try:
             keys = [x for x in el.get_info() if x not in ["type", "id", "OwnerHistory"]]

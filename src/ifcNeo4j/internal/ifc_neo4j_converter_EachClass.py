@@ -19,7 +19,7 @@ def typeDict(key: str) -> str:
     return f.create_entity(key).wrapped_data.get_attribute_names()
 
 
-def _ifc_neo4j_converter_each_class(ifc_path: os.PathLike | str, driver: Driver | Session = GraphDatabase.driver(neo4j_uri, auth=(neo4j_username, neo4j_password)), ignored_classes: List[str] = ["IfcOwnerHistory"]):
+def _ifc_neo4j_converter_each_class(ifc_path: os.PathLike | str, driver: Driver | Session = GraphDatabase.driver(neo4j_uri, auth=(neo4j_username, neo4j_password)), ignored_classes: list[str] = ["IfcOwnerHistory"]):
     start = time.time()
     print("Start!")
     print(time.strftime("%Y/%m/%d %H:%M:%S", time.strptime(time.ctime())))
