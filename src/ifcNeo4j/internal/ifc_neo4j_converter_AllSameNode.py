@@ -4,7 +4,7 @@ from ifcopenshell import file
 import sys
 import time
 import os
-from neo4j import GraphDatabase, Driver
+from neo4j import GraphDatabase, Driver, Session
 
 # Load environment variables
 neo4j_username = os.getenv("NEO4J_USERNAME", "neo4j")
@@ -16,7 +16,7 @@ def _typeDict(key: str) -> List[str]:
     value: List[str] = f.create_entity(key).wrapped_data.get_attribute_names()
     return value
 
-def _ifc_neo4j_converter_all_same_class(ifc_path: os.PathLike | str, driver: Driver = GraphDatabase.driver(neo4j_uri, auth=(neo4j_username, neo4j_password)), ignored_classes: List[str] = ["IfcOwnerHistory"]):
+def _ifc_neo4j_converter_all_same_class(ifc_path: os.PathLike | str, driver: Driver | Session = GraphDatabase.driver(neo4j_uri, auth=(neo4j_username, neo4j_password)), ignored_classes: List[str] = ["IfcOwnerHistory"]):
     start = time.time()
     print("Start!")
     print(time.strftime("%Y/%m/%d %H:%M", time.strptime(time.ctime())))
@@ -76,7 +76,7 @@ def _ifc_neo4j_converter_all_same_class(ifc_path: os.PathLike | str, driver: Dri
     print("List creation process done in", round(time.time() - start, 2), "seconds.")
     print(time.strftime("%Y/%m/%d %H:%M", time.strptime(time.ctime())))
 
-    with driver.session() as session:
+    with driver if isinstance(driver, Session) else driver.session() as session:
         # Delete all existing nodes/relationships
         session.run("MATCH (n) DETACH DELETE n")
 
@@ -96,8 +96,6 @@ def _ifc_neo4j_converter_all_same_class(ifc_path: os.PathLike | str, driver: Dri
                 MATCH (b:IfcNode {nid: $id2})
                 CREATE (a)-[r:`%s`]->(b)
             """ % relType, parameters={"id1": nId1, "id2": nId2})
-
-    driver.close()
 
     print("All done. Total time:", round(time.time() - start, 2), "seconds.")
     print(time.strftime("%Y/%m/%d %H:%M", time.strptime(time.ctime())))
